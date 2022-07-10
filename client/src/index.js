@@ -3,14 +3,18 @@ import ReactDOM from "react-dom";
 import {
     AdaptivityProvider,
     AppRoot,
+    Avatar,
     Button,
     Checkbox,
     ConfigProvider,
     Div,
     Epic,
     File,
+    FormItem,
+    Gradient,
     Group,
     Input,
+    NativeSelect,
     Panel,
     PanelHeader,
     PanelHeaderBack,
@@ -20,6 +24,7 @@ import {
     Tabbar,
     TabbarItem,
     Textarea,
+    Title,
     View,
     withAdaptivity
 } from "@vkontakte/vkui";
@@ -27,8 +32,11 @@ import {
     Icon28Newsfeed,
     Icon28NewsfeedOutline,
     Icon28ServicesOutline,
+    Icon28SettingsOutline,
     Icon28UploadOutline,
+    Icon56CameraOffOutline,
     Icon56ComputerOutline,
+    Icon56HideOutline,
     Icon56MessagesOutline,
     Icon56PaletteOutline,
     Icon56Users3Outline
@@ -62,35 +70,53 @@ const App = withAdaptivity(
         const [myAutographs, setMyAutographs] = useState([])
         const [usersAutographs, setUsersAutographs] = useState([])
         const [user, setUser] = useState(null)
+        const [settingsLeave, setSettingsLeave] = useState("all")
+        const [settingsView, setSettingsView] = useState("all")
+        const [deniedView, setDeniedView] = useState(false)
+        const [canAdd, setCanAdd] = useState(false)
 
         useEffect(() => {
             bridge.send("VKWebAppInit");
 
             bridge.send("VKWebAppGetUserInfo").then(r => {
                 setCurrentUser(r)
-                loadAutographs(r.id)
+                loadAutographs(r.id, true)
+                loadSettings(r.id)
+
+                const launchParams = window.location.search.slice(1);
+                const launchParamsObj = queryString.parse(launchParams)
+                // launchParamsObj.vk_profile_id = "1"
+
+                setLaunchedFrom(launchParamsObj.vk_profile_id)
+                getCanAdd(launchParamsObj.vk_profile_id)
+
+                if (!launchParamsObj.vk_profile_id) {
+                    setActiveStory("my_autographs")
+                    loadUser(launchParamsObj.vk_profile_id)
+                    loadAutographs(launchParamsObj.vk_profile_id, false)
+                }
+
+                if (!launchParamsObj.vk_has_profile_button) {
+                    addToProfile()
+                }
             })
 
-
-            const launchParams = window.location.search.slice(1);
-            const launchParamsObj = queryString.parse(launchParams)
-            launchParamsObj.vk_profile_id = "223632391"
-
-            setLaunchedFrom(launchParamsObj.vk_profile_id)
-
-            if (!launchParamsObj.vk_profile_id) {
-                setActiveStory("my_autographs")
-                loadUser(launchParamsObj.vk_profile_id)
-                loadAutographs(launchParamsObj.vk_profile_id, false)
-            }
-
-            if (!launchParamsObj.vk_has_profile_button) {
-                addToProfile()
-            }
         }, [])
+
+        useEffect(() => {
+            loadAutographs(launchedFrom, false)
+            loadSettings()
+            loadAutographs(currentUser?.id, true)
+        }, [activeStory, activePanel])
 
         const addToProfile = () => {
             bridge.send("VKWebAppAddToProfile", {ttl: 0})
+        }
+
+        const getCanAdd = (id) => {
+            axios.get(BACKEND + "canAddAutograph/" + id).then(r => {
+                setCanAdd(r.data.canAdd)
+            })
         }
 
         const loadUser = async (fromId) => {
@@ -157,7 +183,7 @@ const App = withAdaptivity(
         const addAutograph = (type, passImage = null) => {
             return axios.post(BACKEND + "addAutograph", {
                 from: currentUser.id,
-                to: "223632391",
+                to: launchedFrom,
                 text: text,
                 image: passImage || image,
                 displayName: name,
@@ -176,12 +202,17 @@ const App = withAdaptivity(
 
         const loadAutographs = (id = null, own = false) => {
             showSpinner()
-            axios.get(BACKEND + "getAutographsTo/" + id || currentUser?.id).then(r => {
-                if (own) {
-                    setMyAutographs(r.data)
+            axios.get(BACKEND + "getAutographsTo/" + id || currentUser?.id, {headers: {own: own}}).then(r => {
+                if (r.data?.denied === true) {
+                    setDeniedView(true)
                 } else {
-                    setUsersAutographs(r.data)
+                    if (own) {
+                        setMyAutographs(r.data)
+                    } else {
+                        setUsersAutographs(r.data)
+                    }
                 }
+
                 hideSpinner()
             })
         }
@@ -200,6 +231,22 @@ const App = withAdaptivity(
 
         const shareApp = () => {
             bridge.send("VKWebAppShare", {link: "https://vk.com/app8213399"})
+        }
+
+        const onSettingsUpdate = (type, e) => {
+            showSpinner()
+            axios.post(BACKEND + "setSettings", {[type]: e, id: currentUser?.id}).then((r) => {
+                loadSettings(currentUser?.id)
+            })
+        }
+
+        const loadSettings = (id = null) => {
+            showSpinner()
+            axios.post(BACKEND + "getSettings", {id: id || currentUser?.id}).then(r => {
+                setSettingsLeave(r.data?.leave)
+                setSettingsView(r.data?.view)
+                hideSpinner()
+            })
         }
 
         return (
@@ -241,6 +288,14 @@ const App = withAdaptivity(
                                                 <Icon28Newsfeed/>
                                             </TabbarItem>
                                         }
+                                        <TabbarItem
+                                            onClick={onStoryChange}
+                                            selected={activeStory === "settings"}
+                                            data-story="settings"
+                                            text="Настройки"
+                                        >
+                                            <Icon28SettingsOutline/>
+                                        </TabbarItem>
                                     </Tabbar>
                                 }
                             >
@@ -260,6 +315,7 @@ const App = withAdaptivity(
                                                                            isAnon={a?.isAnon}
                                                                            name={a?.displayName}
                                                                            date={a?.date}
+                                                                           stories
                                                             />
                                                         )
                                                     })
@@ -278,46 +334,57 @@ const App = withAdaptivity(
                                     <Panel id="leave">
                                         <PanelHeader>Оставить автограф</PanelHeader>
                                         <Div>
-                                            <Group>
-                                                <Button
-                                                    size="l"
-                                                    stretched
-                                                    before={<Icon56MessagesOutline/>}
-                                                    onClick={() => {
-                                                        setActiveView("addAutograph");
-                                                        setActivePanel("addText")
-                                                    }}
-                                                >
-                                                    <span>Добавить тектовый автограф</span>
-                                                </Button>
+                                            {
+                                                (currentUser?.id + "") === (launchedFrom + "") ?
+                                                    <Placeholder icon={<Icon56HideOutline/>}
+                                                                 header="Нельзя оставить автограф самому себе!"/> :
+                                                    canAdd ?
+                                                        <Group>
+                                                            <Button
+                                                                size="l"
+                                                                stretched
+                                                                before={<Icon56MessagesOutline/>}
+                                                                onClick={() => {
+                                                                    setActiveView("addAutograph");
+                                                                    setActivePanel("addText")
+                                                                }}
+                                                            >
+                                                                <span>Добавить тектовый автограф</span>
+                                                            </Button>
 
-                                                <Button
-                                                    size="l"
-                                                    stretched
-                                                    style={{marginTop: "12px"}}
-                                                    before={<Icon56ComputerOutline/>}
-                                                    onClick={() => {
-                                                        setActiveView("addAutograph");
-                                                        setActivePanel("addPhoto")
-                                                    }}
+                                                            <Button
+                                                                size="l"
+                                                                stretched
+                                                                style={{marginTop: "12px"}}
+                                                                before={<Icon56ComputerOutline/>}
+                                                                onClick={() => {
+                                                                    setActiveView("addAutograph");
+                                                                    setActivePanel("addPhoto")
+                                                                }}
 
-                                                >
-                                                    <span>Добавить автограф-картинку</span>
-                                                </Button>
+                                                            >
+                                                                <span>Добавить автограф-картинку</span>
+                                                            </Button>
 
-                                                <Button
-                                                    size="l"
-                                                    stretched
-                                                    style={{marginTop: "12px"}}
-                                                    before={<Icon56PaletteOutline/>}
-                                                    onClick={() => {
-                                                        setActiveView("addAutograph");
-                                                        setActivePanel("addPaint")
-                                                    }}
-                                                >
-                                                    <span>Добавить автограф-граффити</span>
-                                                </Button>
-                                            </Group>
+                                                            <Button
+                                                                size="l"
+                                                                stretched
+                                                                style={{marginTop: "12px"}}
+                                                                before={<Icon56PaletteOutline/>}
+                                                                onClick={() => {
+                                                                    setActiveView("addAutograph");
+                                                                    setActivePanel("addPaint")
+                                                                }}
+                                                            >
+                                                                <span>Добавить автограф-граффити</span>
+                                                            </Button>
+                                                        </Group>
+                                                        :
+                                                        <Placeholder
+                                                            icon={<Icon56HideOutline/>}
+                                                            header="Пользователь запретил оставлять на его странице графиити"
+                                                        ></Placeholder>
+                                            }
                                         </Div>
                                     </Panel>
                                 </View>
@@ -340,13 +407,66 @@ const App = withAdaptivity(
                                                             />
                                                         )
                                                     })
-                                                    :
-                                                    <Placeholder icon={<Icon56Users3Outline/>}
-                                                                 header="Ничего не нашлось" action={<Button
-                                                        onClick={() => setActiveStory("leave")}>Оставить
-                                                        автограф</Button>}>
-                                                        user?.first_name пока что не получил ни одного автографа...
-                                                    </Placeholder>}
+                                                    : deniedView ?
+                                                        <Placeholder icon={<Icon56CameraOffOutline/>}
+                                                                     header="Пользователь запретил показывать свои автографы"
+                                                        ></Placeholder>
+                                                        :
+                                                        <Placeholder icon={<Icon56Users3Outline/>}
+                                                                     header="Ничего не нашлось" action={<Button
+                                                            onClick={() => setActiveStory("leave")}>Оставить
+                                                            автограф</Button>}>
+                                                            {user?.first_name} пока что не получил ни одного автографа...
+                                                        </Placeholder>
+                                            }
+                                        </Div>
+                                    </Panel>
+                                </View>
+                                <View id="settings" activePanel="settings">
+                                    <Panel id="settings">
+                                        <PanelHeader>Настройки</PanelHeader>
+
+                                        <Gradient
+                                            style={{
+                                                margin: "-7px -7px 0 -7px",
+                                                display: "flex",
+                                                flexDirection: "column",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                textAlign: "center",
+                                                padding: 32,
+                                            }}
+                                        >
+                                            <Avatar size={96} src={currentUser?.photo_200}/>
+                                            <Title
+                                                style={{marginBottom: 8, marginTop: 20}}
+                                                level="2"
+                                                weight="2"
+                                            >
+                                                {currentUser?.first_name} {currentUser?.last_name}
+                                            </Title>
+                                        </Gradient>
+
+                                        <Div>
+                                            <FormItem top="Кто может осатавлять автографы">
+                                                <NativeSelect value={settingsLeave}
+                                                              onInput={e => onSettingsUpdate("leave", e.target.value)}>
+                                                    <option value="all">Все</option>
+                                                    <option value="nobody">Никто</option>
+                                                </NativeSelect>
+                                            </FormItem>
+                                            <FormItem top="Кто может смотреть мои автографы">
+                                                <NativeSelect value={settingsView}
+                                                              onInput={e => onSettingsUpdate("view", e.target.value)}>
+                                                    <option value="all">Все</option>
+                                                    <option value="nobody">Никто</option>
+                                                </NativeSelect>
+                                            </FormItem>
+
+                                            <Button stretched size="l" style={{marginTop: "20px"}}
+                                                    onClick={addToProfile}>
+                                                Добавить в профиль
+                                            </Button>
                                         </Div>
                                     </Panel>
                                 </View>
