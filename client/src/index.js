@@ -14,7 +14,9 @@ import {
     Panel,
     PanelHeader,
     PanelHeaderBack,
-    Root, ScreenSpinner,
+    Placeholder,
+    Root,
+    ScreenSpinner,
     Tabbar,
     TabbarItem,
     Textarea,
@@ -22,15 +24,22 @@ import {
     withAdaptivity
 } from "@vkontakte/vkui";
 import {
+    Icon28Newsfeed,
     Icon28NewsfeedOutline,
     Icon28ServicesOutline,
     Icon28UploadOutline,
     Icon56ComputerOutline,
     Icon56MessagesOutline,
-    Icon56PaletteOutline
+    Icon56PaletteOutline,
+    Icon56Users3Outline
 } from "@vkontakte/icons";
 import "@vkontakte/vkui/dist/vkui.css";
 import {Paintable} from "paintablejs/react";
+import {BACKEND} from "./config";
+import axios from "axios";
+import bridge from "@vkontakte/vk-bridge";
+import * as queryString from "query-string";
+import {AutographCard} from "./components/AutographCard";
 
 const App = withAdaptivity(
     ({viewWidth}) => {
@@ -48,6 +57,56 @@ const App = withAdaptivity(
         const [thickness, setThickness] = useState(5);
         const [useEraser, setUseEraser] = useState(false);
         const [popout, setPopout] = useState(null)
+        const [currentUser, setCurrentUser] = useState(null)
+        const [launchedFrom, setLaunchedFrom] = useState(null)
+        const [myAutographs, setMyAutographs] = useState([])
+        const [usersAutographs, setUsersAutographs] = useState([])
+        const [user, setUser] = useState(null)
+
+        useEffect(() => {
+            bridge.send("VKWebAppInit");
+
+            bridge.send("VKWebAppGetUserInfo").then(r => {
+                setCurrentUser(r)
+                loadAutographs(r.id)
+            })
+
+
+            const launchParams = window.location.search.slice(1);
+            const launchParamsObj = queryString.parse(launchParams)
+            launchParamsObj.vk_profile_id = "223632391"
+
+            setLaunchedFrom(launchParamsObj.vk_profile_id)
+
+            if (!launchParamsObj.vk_profile_id) {
+                setActiveStory("my_autographs")
+                loadUser(launchParamsObj.vk_profile_id)
+                loadAutographs(launchParamsObj.vk_profile_id, false)
+            }
+
+            if (!launchParamsObj.vk_has_profile_button) {
+                addToProfile()
+            }
+        }, [])
+
+        const addToProfile = () => {
+            bridge.send("VKWebAppAddToProfile", {ttl: 0})
+        }
+
+        const loadUser = async (fromId) => {
+            const token = (await bridge.send("VKWebAppGetAuthToken", {
+                "app_id": 8213399,
+                "scope": ""
+            })).access_token
+            const user = (await bridge.send("VKWebAppCallAPIMethod",
+                {
+                    "method": "users.get",
+                    "request_id": "123432123",
+                    "params": {"user_ids": fromId, "v": "5.131", "access_token": token, "fields": "photo_200"}
+                })).response[0]
+            setUser(user)
+        }
+
 
         const showSpinner = () => {
             setPopout(<ScreenSpinner/>)
@@ -59,17 +118,25 @@ const App = withAdaptivity(
 
         const onSaveGraffiti = (image) => {
             setImage(image)
-            paintableRef.current?.clear()
-            setActive(true)
-            setActiveView("epic")
+            addAutograph("graffiti", image).then(r => {
+                paintableRef.current?.clear()
+                setActive(true)
+                setActiveView("epic")
+            })
         }
 
         const onSaveText = () => {
-            console.log(name, text, isAnon)
+            showSpinner()
+            addAutograph("text").then(r => {
+                clearData()
+            })
         }
 
         const onSavePicture = () => {
-            console.log(name, image, isAnon)
+            showSpinner()
+            addAutograph("picture").then(r => {
+                clearData()
+            })
         }
 
         const toBase64 = (file) => new Promise((resolve, reject) => {
@@ -87,20 +154,53 @@ const App = withAdaptivity(
             })
         }
 
+        const addAutograph = (type, passImage = null) => {
+            return axios.post(BACKEND + "addAutograph", {
+                from: currentUser.id,
+                to: "223632391",
+                text: text,
+                image: passImage || image,
+                displayName: name,
+                isAnon: isAnon,
+                type: type
+            })
+        }
+
         const clearData = () => {
             setName("")
             setImage("")
             setIsAnon(false)
             setActiveView("epic")
+            hideSpinner()
+        }
+
+        const loadAutographs = (id = null, own = false) => {
+            showSpinner()
+            axios.get(BACKEND + "getAutographsTo/" + id || currentUser?.id).then(r => {
+                if (own) {
+                    setMyAutographs(r.data)
+                } else {
+                    setUsersAutographs(r.data)
+                }
+                hideSpinner()
+            })
         }
 
         useEffect(() => {
             if (isAnon) {
                 setName("Аноним")
             } else {
-                setName("Человек")
+                setName(currentUser?.first_name + " " + currentUser?.last_name)
             }
-        }, [isAnon])
+        }, [isAnon, currentUser])
+
+        useEffect(() => {
+            loadAutographs(currentUser?.id, true)
+        }, [currentUser])
+
+        const shareApp = () => {
+            bridge.send("VKWebAppShare", {link: "https://vk.com/app8213399"})
+        }
 
         return (
             <AppRoot>
@@ -119,20 +219,59 @@ const App = withAdaptivity(
                                         >
                                             <Icon28NewsfeedOutline/>
                                         </TabbarItem>
-                                        <TabbarItem
-                                            onClick={onStoryChange}
-                                            selected={activeStory === "leave"}
-                                            data-story="leave"
-                                            text="Оставить автограф"
-                                        >
-                                            <Icon28ServicesOutline/>
-                                        </TabbarItem>
+                                        {
+                                            !!launchedFrom &&
+                                            <TabbarItem
+                                                onClick={onStoryChange}
+                                                selected={activeStory === "leave"}
+                                                data-story="leave"
+                                                text="Оставить автограф"
+                                            >
+                                                <Icon28ServicesOutline/>
+                                            </TabbarItem>
+                                        }
+                                        {
+                                            !!launchedFrom &&
+                                            <TabbarItem
+                                                onClick={onStoryChange}
+                                                selected={activeStory === "autographs"}
+                                                data-story="autographs"
+                                                text="Автографы"
+                                            >
+                                                <Icon28Newsfeed/>
+                                            </TabbarItem>
+                                        }
                                     </Tabbar>
                                 }
                             >
                                 <View id="my_autographs" activePanel="my_autographs">
                                     <Panel id="my_autographs">
                                         <PanelHeader>Мои автографы</PanelHeader>
+
+                                        <Div>
+                                            {
+                                                myAutographs.length ?
+                                                    myAutographs.map(a => {
+                                                        return (
+                                                            <AutographCard fromId={a?.from}
+                                                                           text={a?.text}
+                                                                           type={a?.type}
+                                                                           image={a?.image}
+                                                                           isAnon={a?.isAnon}
+                                                                           name={a?.displayName}
+                                                                           date={a?.date}
+                                                            />
+                                                        )
+                                                    })
+                                                    :
+                                                    <Placeholder icon={<Icon56Users3Outline/>}
+                                                                 header="Ничего не нашлось" action={<Button
+                                                        onClick={shareApp}>Поделиться</Button>}>
+                                                        Скорее собирайте автографы! Попросите у друзей расписаться на
+                                                        вашей странице!
+                                                    </Placeholder>
+                                            }
+                                        </Div>
                                     </Panel>
                                 </View>
                                 <View id="leave" activePanel="leave">
@@ -179,6 +318,35 @@ const App = withAdaptivity(
                                                     <span>Добавить автограф-граффити</span>
                                                 </Button>
                                             </Group>
+                                        </Div>
+                                    </Panel>
+                                </View>
+                                <View id="autographs" activePanel="autographs">
+                                    <Panel id="autographs">
+                                        <PanelHeader>Автографы</PanelHeader>
+
+                                        <Div>
+                                            {
+                                                usersAutographs.length ?
+                                                    usersAutographs.map(a => {
+                                                        return (
+                                                            <AutographCard fromId={a?.from}
+                                                                           text={a?.text}
+                                                                           type={a?.type}
+                                                                           image={a?.image}
+                                                                           isAnon={a?.isAnon}
+                                                                           name={a?.displayName}
+                                                                           date={a?.date}
+                                                            />
+                                                        )
+                                                    })
+                                                    :
+                                                    <Placeholder icon={<Icon56Users3Outline/>}
+                                                                 header="Ничего не нашлось" action={<Button
+                                                        onClick={() => setActiveStory("leave")}>Оставить
+                                                        автограф</Button>}>
+                                                        user?.first_name пока что не получил ни одного автографа...
+                                                    </Placeholder>}
                                         </Div>
                                     </Panel>
                                 </View>
