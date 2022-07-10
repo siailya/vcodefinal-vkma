@@ -1,70 +1,35 @@
-# Getting Started with Create React App
+# FTIT - Вездекод-2022 Финал
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-index).
+## VKMA
+### Демо - https://vk.com/app8213399
+----
 
-## Available Scripts
+Это — решение в виде мини-приложения ВКонтакте (категория VK Mini Apps)
 
-In the project directory, you can run:
+### Что реализовано?  
+- Мини-приложение (далее - МП) запускается с кнопки на странице пользователя, после чего зашедший пользователь может просмотреть альбом автографов и дополнить его - *10*
+- Поддерживается загрузка изображений из галереи - *20*
+- Добавлена возможность делиться автографами в истории (полностью работает в m.vk.com, на некоторых мобильных клиентов могут быть сбои) - *30*
+- Добавлена возможность настраивать приватность - можно скрыть свой альбом или запретить оставлять автографы - *40*
+- Пользователи могут выбрать тип автографа "Граффити" и нарисовать его самостоятельно
 
-### `npm start`
+---
 
-Runs the index in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+Для локального запуска нужно выполнить установку зависимостей клиента и сервера: 
+`cd server && yarn` и `cd client && yarn`
 
-### `npm test`
+Так же нужно сбилдить фронтенд-часть приложения в директории client:
+`yarn run build`
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-index/docs/running-tests) for more information.
 
-### `npm run build`
+После чего запустить проект в **директории server**:
+```
+yarn run server:start
+```
 
-Builds the index for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+Мини-приложение запустится на локальном сервере на порту `5046`
 
-The build is minified and the filenames include the hashes.\
-Your index is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-index/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-index/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-index/docs/code-splitting](https://facebook.github.io/create-react-index/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-index/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-index/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-index/docs/making-a-progressive-web-index](https://facebook.github.io/create-react-index/docs/making-a-progressive-web-index)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-index/docs/advanced-configuration](https://facebook.github.io/create-react-index/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-index/docs/deployment](https://facebook.github.io/create-react-index/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-index/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-index/docs/troubleshooting#npm-run-build-fails-to-minify)
+--- 
+  
+created by FTIT (https://vk.com/ftitdev)
